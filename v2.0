@@ -1,0 +1,89 @@
+#include "DHT.h" //бібліотека датчика вологості
+#include <math.h> // бібліотека математичних розрахунків
+
+//ініціалізація пінів
+#define PIN_RELAY_2 3 //реле2 живлення насоса для відкачки води
+#define DHTPIN1 4 //датчик вологості і температури повітря
+#define PIN_RELAY_1 5 //реле1 живлення установки
+#define DHTPIN2 6 //датчик вологості і температури радіатора
+#define POWER_PIN  7 //живлення датчика рівня води
+#define SIGNAL_PIN A5 //пін отримання сигналу з датчика рівня води
+
+// масив залежності густини насиченої пари від температури, номер елемента у масиві - температура
+float array[] = {4.8, 5.2, 5.6, 6, 6.4, 6.8, 7.3, 7.8, 8.3, 8.8, 9.4, 10, 10.7, 11.4, 12.1, 12.8, 13.6, 14.5, 15.4, 16.3, 17.3, 18.4, 19.4, 20.6, 21.8, 23.1, 24.4, 25.8, 27.2, 28.7, 30,3};
+
+//змінні
+DHT dht1(DHTPIN1, DHT11);
+DHT dht2(DHTPIN2, DHT11);
+int value = 0; // змінна для зберігання значення датчика рівня води
+
+void setup() {
+  pinMode(PIN_RELAY_1, OUTPUT); // Оголошуємо пін5 реле як вихід
+  pinMode(PIN_RELAY_2, OUTPUT); // Оголошуємо пін4 реле як вихід
+  digitalWrite(PIN_RELAY_1, LOW); // Задаємо початковий стан реле1
+  digitalWrite(PIN_RELAY_2, HIGH); // Задаємо початковий стан реле2
+  Serial.begin(9600);
+  pinMode(POWER_PIN, OUTPUT);   // вивід D7 як вихідний
+  digitalWrite(POWER_PIN, LOW); // Задаэмо початковий стан
+  dht1.begin();
+  dht2.begin();  
+}
+
+void loop() {
+  delay(5000); // затримка
+  float h1 = dht1.readHumidity(); //Вимірюємо вологість навколишнього повітря  
+  float t1 = dht1.readTemperature(); //Вимірюємо температуру навколишнього повітря 
+  float t2 = dht2.readTemperature(); //Вимірюємо температуру датчик на радіаторі
+
+  if (isnan(h1) || isnan(t1) || isnan(t2)) {  // Перевірка. Якщо не вдається зчитати показання, виводиться "Помилка зчитування", і програма завершує роботу
+    Serial.println("Помилка зчитування");
+    return;
+  }
+  
+  // змінні для визначення густини насиченої пари
+  int rnd1 = round(t1);
+  float ro_air = array[rnd1];
+  int rnd2 = round(t2);
+  float ro_radiator = array[rnd2];
+
+  if (h1*ro_air > 100*ro_radiator) {
+    digitalWrite(PIN_RELAY_1, HIGH); // Вмикаємо реле1 коли виконується умова, за якої відбувається конденсація
+  }
+  else
+  {
+    digitalWrite(PIN_RELAY_1, LOW); // Вимикаємо реле1
+  }
+
+  digitalWrite(POWER_PIN, HIGH);  // вмикаємо датчик рівня води
+  delay(10);                      // затримка 1000 мілісекунд
+  value = analogRead(SIGNAL_PIN); // зчитати аналогове значення з датчика
+  digitalWrite(POWER_PIN, LOW);   // вимикаємо датчик рівня води
+
+  if (value>600) {
+    digitalWrite(PIN_RELAY_2, LOW); // Вмикаємо реле2 коли вода досягне датчика
+  }
+  else
+  {
+    digitalWrite(PIN_RELAY_2, HIGH); // Вимикаємо реле2 коли вода відкачана з ємості
+  }
+    
+  //Виведення показників в монітор
+  Serial.print("Вологість: ");
+  Serial.print(h1);
+  Serial.println(" %\t");
+  Serial.print("Температура1: ");
+  Serial.print(t1);
+  Serial.print(" *C\t");
+  Serial.print("Температура2: ");
+  Serial.print(t2);
+  Serial.println(" *C\t");
+  Serial.print("Значення глибини: ");
+  Serial.println(value);
+  Serial.print("Густина насиченої водяної пари: ");
+  Serial.print(ro_air);
+  Serial.println(" г/м^3\t");
+  Serial.print("Густина насиченої охолодженої насиченої водяної пари: ");
+  Serial.print(ro_radiator);
+  Serial.println(" г/м^3\t");
+  Serial.println("\t");
+}
